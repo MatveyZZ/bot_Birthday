@@ -1,22 +1,19 @@
-import google.generativeai as genai
-
+# ai_generator.py
+import logging
+from gigachat import GigaChat
 import config
 
-# Настройка API ключа Gemini
-genai.configure(api_key=config.GEMINI_API_KEY)
-
-# Выбор модели (Gemini 2.5 Flash бесплатен и быстр)
-model = genai.GenerativeModel('gemini-2.5-flash')
-
 def generate_congratulations(name: str) -> str:
-    """
-    Генерирует персонализированное поздравление с днём рождения.
-    """
     try:
-        prompt = f"Напиши короткое, оригинальное и тёплое поздравление с днём рождения для {name}. На русском языке, без лишних деталей."
-        response = model.generate_content(prompt)
-        return response.text
+        with GigaChat(
+            credentials=config.GIGACHAT_CLIENT_SECRET,
+            scope=config.GIGACHAT_SCOPE,
+            client_id=config.GIGACHAT_CLIENT_ID,
+            verify_ssl_certs=False,
+        ) as client:
+            prompt = f"Напиши короткое, оригинальное и тёплое поздравление с днём рождения для {name}. На русском языке, без лишних деталей."
+            response = client.chat(prompt)
+            return response.choices[0].message.content
     except Exception as e:
-        logging.error(f"Ошибка при генерации текста: {e}")
-        # Возвращаем запасное поздравление
-        return f"С днём рождения, {name}! Всего самого наилучшего!"
+        logging.error(f"Ошибка GigaChat: {e}")
+        return f"{name}, с днём рождения! Счастья и здоровья!"

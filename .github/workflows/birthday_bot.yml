@@ -1,0 +1,33 @@
+name: Birthday Bot Scheduler
+
+on:
+  schedule:
+    # Запуск каждый день в 6:00 UTC (это 9:00 по Москве)
+    - cron: '0 6 * * *'
+  workflow_dispatch: # Позволяет запускать бота вручную для теста
+
+jobs:
+  run-bot:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run bot script
+        env:
+          TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
+          GROUP_CHAT_ID: ${{ secrets.GROUP_CHAT_ID }}
+          SHEET_ID: ${{ secrets.SHEET_ID }}
+          GIGACHAT_CLIENT_ID: ${{ secrets.GIGACHAT_CLIENT_ID }}
+          GIGACHAT_CLIENT_SECRET: ${{ secrets.GIGACHAT_CLIENT_SECRET }}
+          GIGACHAT_SCOPE: ${{ secrets.GIGACHAT_SCOPE }}
+
+        run: python bot.py
