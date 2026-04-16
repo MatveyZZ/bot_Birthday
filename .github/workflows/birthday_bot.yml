@@ -2,14 +2,14 @@ name: 🎂 Ежедневный поздравитель
 
 on:
   schedule:
-    # Запуск каждый день в 6:00 UTC (9:00 по Москве)
+    # Каждый день в 6:00 UTC (9:00 МСК)
     - cron: '0 6 * * *'
-  workflow_dispatch:   # Ручной запуск для теста
+  workflow_dispatch:   # Ручной запуск
 
 jobs:
   congratulate:
     runs-on: ubuntu-latest
-    timeout-minutes: 65   # Чуть больше часа, чтобы точно успеть
+    timeout-minutes: 65
 
     steps:
       - name: 📥 Получение кода из репозитория
@@ -23,7 +23,8 @@ jobs:
       - name: 📦 Установка зависимостей
         run: pip install -r requirements.txt
 
-      - name: ⏳ Случайная задержка от 0 до 60 минут
+      - name: ⏳ Случайная задержка (только для автоматического запуска)
+        if: github.event_name == 'schedule'
         run: |
           DELAY=$(( RANDOM % 3600 ))
           echo "Жду $DELAY секунд, чтобы поздравить в промежутке 9:00–10:00 МСК..."
@@ -37,9 +38,7 @@ jobs:
           GIGACHAT_CLIENT_ID: ${{ secrets.GIGACHAT_CLIENT_ID }}
           GIGACHAT_CLIENT_SECRET: ${{ secrets.GIGACHAT_CLIENT_SECRET }}
           GIGACHAT_SCOPE: ${{ secrets.GIGACHAT_SCOPE }}
-          # Креды для Google Sheets (файл credentials.json целиком)
           GOOGLE_CREDENTIALS: ${{ secrets.GOOGLE_CREDENTIALS }}
         run: |
-          # Восстанавливаем credentials.json из секрета
           echo "$GOOGLE_CREDENTIALS" > credentials.json
           python bot.py
