@@ -39,7 +39,7 @@ def generate_congratulations(name: str, position: str = "") -> str:
             prompt = f"Напиши короткое, оригинальное и тёплое поздравление с днём рождения для {name}. На русском языке, без лишних деталей."
 
         payload = {
-            "model": "GigaChat",
+            "model": "GigaChat-Lite",
             "messages": [{"role": "user", "content": prompt}],
             "temperature": 0.7,
             "max_tokens": 300
