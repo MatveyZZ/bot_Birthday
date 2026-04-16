@@ -1,27 +1,35 @@
-name: Birthday Bot Scheduler
+name: 🎂 Ежедневный поздравитель
 
 on:
   schedule:
-    # Запуск каждый день в 6:00 UTC (это 9:00 по Москве)
+    # Запуск каждый день в 6:00 UTC (9:00 по Москве)
     - cron: '0 6 * * *'
-  workflow_dispatch: # Позволяет запускать бота вручную для теста
+  workflow_dispatch:   # Ручной запуск для теста
 
 jobs:
-  run-bot:
+  congratulate:
     runs-on: ubuntu-latest
+    timeout-minutes: 65   # Чуть больше часа, чтобы точно успеть
+
     steps:
-      - name: Checkout code
+      - name: 📥 Получение кода из репозитория
         uses: actions/checkout@v4
 
-      - name: Setup Python
+      - name: 🐍 Установка Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
 
-      - name: Install dependencies
+      - name: 📦 Установка зависимостей
         run: pip install -r requirements.txt
 
-      - name: Run bot script
+      - name: ⏳ Случайная задержка от 0 до 60 минут
+        run: |
+          DELAY=$(( RANDOM % 3600 ))
+          echo "Жду $DELAY секунд, чтобы поздравить в промежутке 9:00–10:00 МСК..."
+          sleep $DELAY
+
+      - name: 🚀 Запуск бота
         env:
           TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
           GROUP_CHAT_ID: ${{ secrets.GROUP_CHAT_ID }}
@@ -29,5 +37,9 @@ jobs:
           GIGACHAT_CLIENT_ID: ${{ secrets.GIGACHAT_CLIENT_ID }}
           GIGACHAT_CLIENT_SECRET: ${{ secrets.GIGACHAT_CLIENT_SECRET }}
           GIGACHAT_SCOPE: ${{ secrets.GIGACHAT_SCOPE }}
-
-        run: python bot.py
+          # Креды для Google Sheets (файл credentials.json целиком)
+          GOOGLE_CREDENTIALS: ${{ secrets.GOOGLE_CREDENTIALS }}
+        run: |
+          # Восстанавливаем credentials.json из секрета
+          echo "$GOOGLE_CREDENTIALS" > credentials.json
+          python bot.py
