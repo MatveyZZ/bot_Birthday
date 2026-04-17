@@ -5,10 +5,36 @@ import base64
 import config
 import urllib3
 import re
+import pymorphy3
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
+# Инициализация морфологического анализатора
+morph = pymorphy3.MorphAnalyzer()
+
+def inflect_name(first_name: str, last_name: str, case: str = 'datv') -> str:
+    """
+    Склоняет имя и фамилию в заданный падеж.
+    case: 'nomn' - именительный (кто?), 'datv' - дательный (кому?)
+    Возвращает строку вида "Владу Котову"
+    """
+    try:
+        first_parse = morph.parse(first_name)[0]
+        last_parse = morph.parse(last_name)[0] if last_name else None
+        
+        first_inflected = first_parse.inflect({case}).word if first_parse.inflect({case}) else first_name
+        last_inflected = last_parse.inflect({case, 'sing'}).word if last_parse and last_parse.inflect({case}) else last_name
+        
+        if last_name:
+            return f"{first_inflected} {last_inflected}".strip()
+        else:
+            return first_inflected
+    except Exception as e:
+        logging.warning(f"Не удалось просклонять '{first_name} {last_name}': {e}")
+        return f"{first_name} {last_name}".strip()
+
 def get_access_token():
+    """Получает access token для GigaChat API."""
     url = "https://ngw.devices.sberbank.ru:9443/api/v2/oauth"
     credentials = f"{config.GIGACHAT_CLIENT_ID}:{config.GIGACHAT_CLIENT_SECRET}"
     encoded_credentials = base64.b64encode(credentials.encode('utf-8')).decode('utf-8')
@@ -24,7 +50,6 @@ def get_access_token():
 
 def clean_response(text: str) -> str:
     """Удаляет из ответа типовые дисклеймеры GigaChat."""
-    # Список ключевых фраз, при обнаружении которых удаляется весь абзац или строка
     disclaimer_phrases = [
         "GigaChat не обладает",
         "генеративные языковые модели",
@@ -38,13 +63,33 @@ def clean_response(text: str) -> str:
     lines = text.split('\n')
     cleaned_lines = []
     for line in lines:
-        # Если строка содержит любую из фраз, пропускаем её
         if any(phrase.lower() in line.lower() for phrase in disclaimer_phrases):
             continue
         cleaned_lines.append(line)
     return '\n'.join(cleaned_lines).strip()
 
-def generate_congratulations(name: str, position: str = "") -> str:
+def generate_congratulations(person: dict) -> str:
+    """
+    Генерирует персонализированное поздравление.
+    person = {
+        'full_name': 'Влад Котов',
+        'first_name': 'Влад',
+        'last_name': 'Котов',
+        'position': 'Коммерческий директор',
+        'age': 30,
+        'is_jubilee': True
+    }
+    """
+    name = person['full_name']
+    position = person['position']
+    age = person['age']
+    is_jubilee = person['is_jubilee']
+    first_name = person['first_name']
+    last_name = person['last_name']
+    
+    # Склоняем в дательный падеж (кому?)
+    name_datv = inflect_name(first_name, last_name, 'datv')
+    
     try:
         token = get_access_token()
         api_url = "https://gigachat.devices.sberbank.ru/api/v1/chat/completions"
@@ -53,12 +98,18 @@ def generate_congratulations(name: str, position: str = "") -> str:
             "Content-Type": "application/json"
         }
 
+        # Дополняем системный промпт информацией о юбилее
+        jubilee_text = ""
+        if is_jubilee and age:
+            jubilee_text = f"Сегодня {name} исполняется {age} лет — это ЮБИЛЕЙ! Обязательно упомяни эту круглую дату и сделай акцент на значимости этого события."
+
         system_prompt = (
             "Ты — профессиональный копирайтер, специализирующийся на создании ярких, "
             "эмоциональных и персонализированных корпоративных поздравлений с днём рождения "
             "для коллег в рабочем чате Telegram. Твоя задача — сгенерировать текст поздравления, "
             "строго следуя образцу, приведённому ниже. "
             "ОБЯЗАТЕЛЬНО ИСПОЛЬЗУЙ МНОГО ЭМОДЗИ. "
+            f"{jubilee_text}\n"
             "ПРИМЕР ИДЕАЛЬНОГО ПОЗДРАВЛЕНИЯ (скопируй его стиль, длину и обилие эмодзи):\n"
             "---\n"
             "Добрый день, Коллеги!!!😄🎉💃\n"
@@ -72,8 +123,13 @@ def generate_congratulations(name: str, position: str = "") -> str:
 
         user_prompt = (
             f"Напиши такое же яркое, персонализированное и полное эмодзи поздравление с днём рождения для:\n"
-            f"Имя: {name}\n"
-            f"Должность: {position if position else 'не указана'}\n\n"
+            f"Имя (в именительном падеже): {name}\n"
+            f"Имя в дательном падеже (кому?): {name_datv}\n"
+            f"Должность: {position if position else 'не указана'}\n"
+            f"Возраст: {age if age else 'не указан'}\n"
+            f"Юбилей: {'Да' if is_jubilee else 'Нет'}\n\n"
+            "Используй имя в дательном падеже в обращении (например, 'Владу Котову желаем...'). "
+            "Если это юбилей — обязательно подчеркни важность круглой даты. "
             "Обязательно следуй структуре примера. Не добавляй никаких дисклеймеров или примечаний от лица GigaChat."
         )
 
@@ -93,21 +149,22 @@ def generate_congratulations(name: str, position: str = "") -> str:
         raw_text = resp.json()["choices"][0]["message"]["content"]
         logging.info(f"Ответ GigaChat (первые 200 символов): {raw_text[:200]}...")
         
-        # Очищаем от дисклеймеров
         cleaned_text = clean_response(raw_text)
         if not cleaned_text:
-            # Если после очистки ничего не осталось, используем запасной вариант
             raise ValueError("Пустой ответ после очистки")
         return cleaned_text
 
     except Exception as e:
         logging.error(f"❌ Ошибка GigaChat для {name}: {e}")
-        # Запасное яркое поздравление
+        # Запасное поздравление с учётом склонения
+        jub_text = ""
+        if age:
+            jub_text = f" Поздравляем с {'юбилеем ' if is_jubilee else 'днём рождения'}! Сегодня тебе исполнилось {age} лет!"
         if position:
             return (
                 f"Добрый день, Коллеги!!! 😄🎉💃\n\n"
                 f"Сегодня день рождения у {name}! 🌹🌹🌹🌹🌹🌹🌹🌹🌹🌹🌹🌹🌹🌹🌹\n\n"
-                f"{name}, с днём рождения! 🥳🫰❤️\n\n"
+                f"{name_datv}, с {'юбилеем' if is_jubilee else 'днём рождения'}! 🥳🫰❤️{jub_text}\n\n"
                 f"Поздравляем тебя и благодарим за отличную работу в должности {position}! "
                 f"Пусть каждый день приносит радость, задачи решаются легко, а коллеги ценят и уважают. 💪😁🎈\n\n"
                 f"Желаем успехов, вдохновения и море позитива! 🎂🎂🎂🥳🥳🥳\n\n"
@@ -117,7 +174,7 @@ def generate_congratulations(name: str, position: str = "") -> str:
             return (
                 f"Добрый день, Коллеги!!! 😄🎉💃\n\n"
                 f"Сегодня день рождения у {name}! 🌹🌹🌹🌹🌹🌹🌹🌹🌹🌹🌹🌹🌹🌹🌹\n\n"
-                f"{name}, с днём рождения! 🥳🫰❤️\n\n"
+                f"{name_datv}, с днём рождения! 🥳🫰❤️{jub_text}\n\n"
                 f"Желаем счастья, здоровья, удачи и всего самого наилучшего! Пусть каждый день будет наполнен улыбками и приятными сюрпризами. 😁🎈🍾💪\n\n"
                 f"Обнимаем и любим! Твои коллеги. ❤️🤗"
             )

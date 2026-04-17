@@ -4,9 +4,36 @@ import gspread
 from datetime import datetime
 import config
 
+def calculate_age(birth_date_str):
+    """Вычисляет возраст по дате рождения в формате ДД.ММ.ГГГГ."""
+    try:
+        birth_date = datetime.strptime(birth_date_str, '%d.%m.%Y')
+        today = datetime.now()
+        age = today.year - birth_date.year
+        if (today.month, today.day) < (birth_date.month, birth_date.day):
+            age -= 1
+        return age
+    except:
+        return None
+
+def is_jubilee(age):
+    """Возвращает True, если возраст юбилейный (кратен 5 или 10)."""
+    return age is not None and (age % 5 == 0 or age % 10 == 0)
+
 def get_birthdays_today():
     """
-    Возвращает список кортежей (имя, должность) для именинников.
+    Возвращает список словарей с данными именинников:
+    [
+        {
+            'full_name': 'Влад Котов',
+            'first_name': 'Влад',
+            'last_name': 'Котов',
+            'position': 'Коммерческий директор',
+            'age': 30,
+            'is_jubilee': True
+        },
+        ...
+    ]
     """
     try:
         gc = gspread.service_account(filename='credentials.json')
@@ -18,24 +45,39 @@ def get_birthdays_today():
         birthday_people = []
 
         for i, row in enumerate(records[1:], start=2):
-            if len(row) >= 2:
-                name = row[0].strip()
+            if len(row) >= 3:
+                full_name = row[0].strip()
                 date_str = row[1].strip()
                 position = row[2].strip() if len(row) > 2 else ""
 
-                logging.info(f"📋 Строка {i}: Имя='{name}', Исходная дата='{date_str}', Должность='{position}'")
+                logging.info(f"📋 Строка {i}: Имя='{full_name}', Исходная дата='{date_str}', Должность='{position}'")
 
                 if date_str:
+                    # Ожидаем формат ДД.ММ.ГГГГ
                     date_str = date_str.replace('-', '.')
                     parts = date_str.split('.')
-                    if len(parts) >= 2:
+                    if len(parts) >= 3:
                         day = parts[0].zfill(2)
                         month = parts[1].zfill(2)
                         formatted_date = f"{day}.{month}"
                         logging.info(f"   ➡️ Обработанная дата: {formatted_date}")
                         if formatted_date == today:
-                            birthday_people.append((name, position))
-                            logging.info(f"   ✅ Найден именинник: {name} ({position})")
+                            # Вычисляем возраст
+                            age = calculate_age(date_str)
+                            is_jub = is_jubilee(age)
+                            # Разделяем имя и фамилию (первое слово - имя, остальное - фамилия)
+                            name_parts = full_name.split()
+                            first_name = name_parts[0] if name_parts else full_name
+                            last_name = name_parts[1] if len(name_parts) > 1 else ""
+                            birthday_people.append({
+                                'full_name': full_name,
+                                'first_name': first_name,
+                                'last_name': last_name,
+                                'position': position,
+                                'age': age,
+                                'is_jubilee': is_jub
+                            })
+                            logging.info(f"   ✅ Найден именинник: {full_name}, возраст {age}, юбилей: {is_jub}")
         return birthday_people
     except Exception as e:
         logging.error(f"❌ Ошибка Google Sheets: {e}")

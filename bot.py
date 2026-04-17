@@ -17,11 +17,11 @@ async def main():
             logging.info("Сегодня именинников нет.")
             return
 
-        for name, position in birthdays:
-            greeting = generate_congratulations(name, position)
+        for person in birthdays:
+            greeting = generate_congratulations(person)
             await bot.send_message(chat_id=config.GROUP_CHAT_ID, text=greeting)
-            logging.info(f"Поздравление для {name} отправлено!")
-            await asyncio.sleep(1)
+            logging.info(f"Поздравление для {person['full_name']} отправлено!")
+            await asyncio.sleep(2)  # пауза между сообщениями
 
     except Exception as e:
         logging.error(f"Критическая ошибка: {e}")
