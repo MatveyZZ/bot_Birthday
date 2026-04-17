@@ -21,7 +21,7 @@ async def main():
             greeting = generate_congratulations(person)
             await bot.send_message(chat_id=config.GROUP_CHAT_ID, text=greeting)
             logging.info(f"Поздравление для {person['full_name']} отправлено!")
-            await asyncio.sleep(2)  # пауза между сообщениями
+            await asyncio.sleep(2)
 
     except Exception as e:
         logging.error(f"Критическая ошибка: {e}")

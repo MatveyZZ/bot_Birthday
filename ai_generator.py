@@ -1,4 +1,4 @@
-# ai_generator.py
+# ai_generator.py (полный код с изменениями)
 import logging
 import requests
 import base64
@@ -9,32 +9,32 @@ import pymorphy3
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
-# Инициализация морфологического анализатора
 morph = pymorphy3.MorphAnalyzer()
 
-def inflect_name(first_name: str, last_name: str, case: str = 'datv') -> str:
+def inflect_full_name(full_name: str, case: str = 'datv') -> str:
     """
-    Склоняет имя и фамилию в заданный падеж.
+    Склоняет полное имя (имя + фамилия) в заданный падеж.
     case: 'nomn' - именительный (кто?), 'datv' - дательный (кому?)
-    Возвращает строку вида "Владу Котову"
+    Возвращает строку вида "Владиславу Котову"
     """
+    if not full_name:
+        return full_name
     try:
-        first_parse = morph.parse(first_name)[0]
-        last_parse = morph.parse(last_name)[0] if last_name else None
-        
-        first_inflected = first_parse.inflect({case}).word if first_parse.inflect({case}) else first_name
-        last_inflected = last_parse.inflect({case, 'sing'}).word if last_parse and last_parse.inflect({case}) else last_name
-        
-        if last_name:
-            return f"{first_inflected} {last_inflected}".strip()
-        else:
-            return first_inflected
+        words = full_name.split()
+        inflected_words = []
+        for word in words:
+            parsed = morph.parse(word)[0]
+            inflected = parsed.inflect({case})
+            if inflected:
+                inflected_words.append(inflected.word)
+            else:
+                inflected_words.append(word)  # если не удалось склонять, оставляем исходное
+        return " ".join(inflected_words)
     except Exception as e:
-        logging.warning(f"Не удалось просклонять '{first_name} {last_name}': {e}")
-        return f"{first_name} {last_name}".strip()
+        logging.warning(f"Не удалось просклонять '{full_name}': {e}")
+        return full_name
 
 def get_access_token():
-    """Получает access token для GigaChat API."""
     url = "https://ngw.devices.sberbank.ru:9443/api/v2/oauth"
     credentials = f"{config.GIGACHAT_CLIENT_ID}:{config.GIGACHAT_CLIENT_SECRET}"
     encoded_credentials = base64.b64encode(credentials.encode('utf-8')).decode('utf-8')
@@ -49,7 +49,6 @@ def get_access_token():
     return resp.json()["access_token"]
 
 def clean_response(text: str) -> str:
-    """Удаляет из ответа типовые дисклеймеры GigaChat."""
     disclaimer_phrases = [
         "GigaChat не обладает",
         "генеративные языковые модели",
@@ -69,26 +68,13 @@ def clean_response(text: str) -> str:
     return '\n'.join(cleaned_lines).strip()
 
 def generate_congratulations(person: dict) -> str:
-    """
-    Генерирует персонализированное поздравление.
-    person = {
-        'full_name': 'Влад Котов',
-        'first_name': 'Влад',
-        'last_name': 'Котов',
-        'position': 'Коммерческий директор',
-        'age': 30,
-        'is_jubilee': True
-    }
-    """
-    name = person['full_name']
+    name = person['full_name']          # например, "Владислав Котов"
     position = person['position']
     age = person['age']
     is_jubilee = person['is_jubilee']
-    first_name = person['first_name']
-    last_name = person['last_name']
     
     # Склоняем в дательный падеж (кому?)
-    name_datv = inflect_name(first_name, last_name, 'datv')
+    name_datv = inflect_full_name(name, 'datv')
     
     try:
         token = get_access_token()
@@ -98,7 +84,6 @@ def generate_congratulations(person: dict) -> str:
             "Content-Type": "application/json"
         }
 
-        # Дополняем системный промпт информацией о юбилее
         jubilee_text = ""
         if is_jubilee and age:
             jubilee_text = f"Сегодня {name} исполняется {age} лет — это ЮБИЛЕЙ! Обязательно упомяни эту круглую дату и сделай акцент на значимости этого события."
@@ -110,7 +95,8 @@ def generate_congratulations(person: dict) -> str:
             "строго следуя образцу, приведённому ниже. "
             "ОБЯЗАТЕЛЬНО ИСПОЛЬЗУЙ МНОГО ЭМОДЗИ. "
             "❗️ ВАЖНО: НИ В КОЕМ СЛУЧАЕ НЕ ИСПОЛЬЗУЙ ПОЖЕЛАНИЯ ЗДОРОВЬЯ (слово 'здоровье' и его производные). "
-            "❗️ ОБРАЩАЙСЯ К ИМЕНИННИКУ ТОЛЬКО ПО ПОЛНОМУ ИМЕНИ (например, Владислав, а не Влад или Владик). "
+            "❗️ ОБРАЩАЙСЯ К ИМЕНИННИКУ ТОЛЬКО ПО ПОЛНОМУ ИМЕНИ, КАК УКАЗАНО В ЗАПРОСЕ (например, 'Владислав', а не 'Влад' или 'Владик'). "
+            "❗️ ИСПОЛЬЗУЙ ТОЛЬКО ТЕ ФОРМЫ ИМЕНИ, КОТОРЫЕ ПРЕДОСТАВЛЕНЫ В ЗАПРОСЕ (именительный и дательный падежи). "
             "Вместо пожеланий здоровья делай упор на профессиональные успехи, вдохновение, позитив, удачу, счастье и т.п. "
             f"{jubilee_text}\n"
             "ПРИМЕР ИДЕАЛЬНОГО ПОЗДРАВЛЕНИЯ (скопируй его стиль, длину и обилие эмодзи):\n"
@@ -126,13 +112,13 @@ def generate_congratulations(person: dict) -> str:
 
         user_prompt = (
             f"Напиши такое же яркое, персонализированное и полное эмодзи поздравление с днём рождения для:\n"
-            f"Имя (в именительном падеже, полное): {name}\n"
-            f"Имя в дательном падеже (кому? полное): {name_datv}\n"
+            f"Полное имя (именительный падеж): {name}\n"
+            f"Полное имя в дательном падеже (кому?): {name_datv}\n"
             f"Должность: {position if position else 'не указана'}\n"
             f"Возраст: {age if age else 'не указан'}\n"
             f"Юбилей: {'Да' if is_jubilee else 'Нет'}\n\n"
-            "Используй имя в дательном падеже в обращении (например, 'Владиславу желаем...'). "
-            "Обращайся строго по полному имени (не используй уменьшительные формы). "
+            "Используй имя в дательном падеже в обращении (например, 'Владиславу Котову желаем...'). "
+            "Обращайся строго по полному имени, без уменьшительных форм. "
             "Если это юбилей — обязательно подчеркни важность круглой даты. "
             "❗️ НЕ ИСПОЛЬЗУЙ слова 'здоровье' и пожелания здоровья. "
             "Обязательно следуй структуре примера. Не добавляй никаких дисклеймеров или примечаний от лица GigaChat."
@@ -161,7 +147,6 @@ def generate_congratulations(person: dict) -> str:
 
     except Exception as e:
         logging.error(f"❌ Ошибка GigaChat для {name}: {e}")
-        # Запасное поздравление с учётом склонения
         jub_text = ""
         if age:
             jub_text = f" Поздравляем с {'юбилеем ' if is_jubilee else 'днём рождения'}! Сегодня тебе исполнилось {age} лет!"
