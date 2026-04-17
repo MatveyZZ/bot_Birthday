@@ -2,14 +2,14 @@ name: 🎂 Ежедневный поздравитель
 
 on:
   schedule:
-    # Каждый день в 6:00 UTC (9:00 МСК)
-    - cron: '0 6 * * *'
+    # Запуск каждый день в 5:00 UTC (8:00 по Москве)
+    - cron: '0 5 * * *'
   workflow_dispatch:   # Ручной запуск
 
 jobs:
   congratulate:
     runs-on: ubuntu-latest
-    timeout-minutes: 65
+    timeout-minutes: 10   # Достаточно для быстрой отправки
 
     steps:
       - name: 📥 Получение кода из репозитория
@@ -23,12 +23,7 @@ jobs:
       - name: 📦 Установка зависимостей
         run: pip install -r requirements.txt
 
-      - name: ⏳ Случайная задержка (только для автоматического запуска)
-        if: github.event_name == 'schedule'
-        run: |
-          DELAY=$(( RANDOM % 3600 ))
-          echo "Жду $DELAY секунд, чтобы поздравить в промежутке 9:00–10:00 МСК..."
-          sleep $DELAY
+      # Убираем шаг со случайной задержкой полностью
 
       - name: 🚀 Запуск бота
         env:
