@@ -7,16 +7,9 @@ import urllib3
 import pymorphy3
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
-
-# Инициализация морфологического анализатора
 morph = pymorphy3.MorphAnalyzer()
 
 def inflect_name(first_name: str, last_name: str, case: str = 'datv') -> str:
-    """
-    Склоняет имя и фамилию в заданный падеж.
-    case: 'nomn' - именительный (кто?), 'datv' - дательный (кому?)
-    Возвращает строку вида "Владиславу Котову"
-    """
     try:
         first_parse = morph.parse(first_name)[0]
         last_parse = morph.parse(last_name)[0] if last_name else None
@@ -33,7 +26,6 @@ def inflect_name(first_name: str, last_name: str, case: str = 'datv') -> str:
         return f"{first_name} {last_name}".strip()
 
 def get_access_token():
-    """Получает access token для GigaChat API."""
     url = "https://ngw.devices.sberbank.ru:9443/api/v2/oauth"
     credentials = f"{config.GIGACHAT_CLIENT_ID}:{config.GIGACHAT_CLIENT_SECRET}"
     encoded_credentials = base64.b64encode(credentials.encode('utf-8')).decode('utf-8')
@@ -48,7 +40,6 @@ def get_access_token():
     return resp.json()["access_token"]
 
 def clean_response(text: str) -> str:
-    """Удаляет из ответа типовые дисклеймеры GigaChat."""
     disclaimer_phrases = [
         "GigaChat не обладает",
         "генеративные языковые модели",
@@ -70,17 +61,6 @@ def clean_response(text: str) -> str:
     return '\n'.join(cleaned_lines).strip()
 
 def generate_congratulations(person: dict) -> str:
-    """
-    Генерирует персонализированное поздравление.
-    person = {
-        'full_name': 'Владислав Котов',
-        'first_name': 'Владислав',
-        'last_name': 'Котов',
-        'position': 'Коммерческий директор',
-        'age': 30,
-        'is_jubilee': True
-    }
-    """
     name = person['full_name']
     position = person['position']
     age = person['age']
@@ -88,7 +68,6 @@ def generate_congratulations(person: dict) -> str:
     first_name = person['first_name']
     last_name = person['last_name']
     
-    # Склоняем в дательный падеж (кому?)
     name_datv = inflect_name(first_name, last_name, 'datv')
     
     try:
@@ -105,13 +84,22 @@ def generate_congratulations(person: dict) -> str:
             if is_jubilee:
                 age_info += " Это юбилей!"
 
+        # Усиленный системный промпт с жёсткими правилами
         system_prompt = (
             "Ты помогаешь писать тёплые и весёлые поздравления с днём рождения для коллег. "
-            "Пиши в корпоративном стиле, с эмодзи. Обращайся по полному имени, на 'ты' или 'Вы' в зависимости от должности. "
-            "Не используй слово 'здоровье'. "
-            "Используй имя не более двух раз."
-            "Пиши имя и фамилию полностью. Владисла**ВУ** - вот так нельзя."
-            "Если нет отчества, то не надо его придумывать."
+            "Пиши в корпоративном стиле, с эмодзи. "
+            "❗️ СТРОГО СЛЕДУЙ ПРАВИЛАМ:\n"
+            "1. Используй ТОЛЬКО те имя и фамилию, которые указаны в запросе. НЕ выдумывай отчества, не сокращай фамилию и имя. "
+            "Если в запросе указано 'Владислав Котов', обращайся 'Владислав' и 'Владиславу' (в дательном падеже). "
+            "Не пиши 'Владислав Иванович' или 'Влад'.\n"
+            "2. Не используй слово 'здоровье' и пожелания здоровья.\n"
+            "3. Придерживайся структуры:\n"
+            "   - Приветствие чату ('Добрый день, Коллеги!!!')\n"
+            "   - Объявление именинника с эмодзи\n"
+            "   - Персональное обращение (имя в именительном падеже)\n"
+            "   - Благодарность и шутки, связанные с должностью\n"
+            "   - Пожелания (без здоровья)\n"
+            "   - Подпись 'Твои коллеги' или 'Ваши коллеги' с эмодзи.\n"
             "Пример:\n"
             "Добрый день, Коллеги!!! 😄🎉\n"
             "Сегодня день рождения у Елены Булычевой!!! 🌹🌹🌹\n"
@@ -121,10 +109,13 @@ def generate_congratulations(person: dict) -> str:
         )
 
         user_prompt = (
-            f"Напиши поздравление для {name} ({position if position else 'сотрудник'})."
-            f"{age_info} "
-            f"В дательном падеже: {name_datv}. "
-            "Сделай текст ярким, с эмодзи, без дисклеймеров."
+            f"Напиши поздравление для:\n"
+            f"Имя (именительный падеж): {name}\n"
+            f"Имя (дательный падеж): {name_datv}\n"
+            f"Должность: {position if position else 'сотрудник'}\n"
+            f"{age_info}\n"
+            "Следуй всем правилам из системы. НЕ придумывай отчество, не сокращай имя и фамилию. "
+            "Объём поздравления должен быть развёрнутым, с эмодзи."
         )
 
         payload = {
@@ -134,7 +125,7 @@ def generate_congratulations(person: dict) -> str:
                 {"role": "user", "content": user_prompt}
             ],
             "temperature": 0.8,
-            "max_tokens": 1500,
+            "max_tokens": 2500,   # увеличенный лимит
             "top_p": 0.9
         }
 
@@ -143,7 +134,6 @@ def generate_congratulations(person: dict) -> str:
         raw_text = resp.json()["choices"][0]["message"]["content"]
         logging.info(f"Полный ответ GigaChat:\n{raw_text}")
 
-        # Если ответ — только дисклеймер, переходим к запасному варианту
         if any(phrase in raw_text.lower() for phrase in [
             "не обладает собственным мнением",
             "генеративные языковые модели",
@@ -157,7 +147,7 @@ def generate_congratulations(person: dict) -> str:
 
     except Exception as e:
         logging.error(f"❌ Ошибка GigaChat для {name}: {e}")
-        # Запасное яркое поздравление
+        # Запасное поздравление (соблюдаем все правила)
         jub_text = ""
         if age:
             jub_text = f" Сегодня тебе исполнилось {age} лет!"
