@@ -24,7 +24,7 @@ def get_birthdays_today():
         sh = gc.open_by_key(config.SHEET_ID)
         worksheet = sh.sheet1
         records = worksheet.get_all_values()
-        today = datetime.now().strftime('%d.%m')
+        today = datetime.now().strftime('%d.%m.%Y')
         logging.info(f"🔍 Сегодня ищем: {today}")
         birthday_people = []
 
