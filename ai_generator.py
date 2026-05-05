@@ -127,7 +127,7 @@ def generate_congratulations(person: dict) -> str:
                 {"role": "user", "content": user_prompt}
             ],
             "temperature": 0.8,
-            "max_tokens": 2500,   # увеличенный лимит
+            "max_tokens": 2000,   # увеличенный лимит
             "top_p": 0.9
         }
 
